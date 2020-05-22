@@ -196,6 +196,7 @@ void Frame(IVC* frame)
 {
 	IVC* frameg = vc_image_new(frame->width, frame->height, 1, 255);
 	vc_rgb_to_gray(frame, frameg);
+	vc_write_image((char*)"frameg.pgm", frameg);
 
 	int *h;
 	int pos = 0;
@@ -304,7 +305,7 @@ void Frame(IVC* frame)
 		int b = 0;
 		//vc_write_image((char*)"row.pgm", row);
 		IVC* rb = vc_image_new(row->width, row->height, 1, 255);
-		vc_gray_to_binary_bernsen(row, rb, 5, 220);
+		vc_gray_to_binary_bernsen(row, rb, 5, 230);
 		//vc_write_image((char *)"rowb.pgm", rb);
 		IVC *rc = vc_image_new(row->width, row->height, 1, 255);
 		vc_binary_open(rb, rc, 5);
@@ -401,7 +402,7 @@ void Frame(IVC* frame)
 			//vc_write_image((char*)"matricula.pgm", matricula);
 			IVC* mb = vc_image_new(matricula->width, matricula->height, 1, 255);
 			//vc_gray_edge_prewitt(matricula, mb, 0.8);
-			vc_gray_to_binary_bernsen(matricula, mb, 5, 100);
+			vc_gray_to_binary_bernsen(matricula, mb, 5, 150);
 			//vc_write_image((char*)"mb.pgm", mb);		
 			IVC* mc = vc_image_new(matricula->width, matricula->height, 1, 255);
 			vc_binary_open(mb, mc, 3);
@@ -415,13 +416,14 @@ void Frame(IVC* frame)
 
 			//vc_write_image((char*)"ml.pgm", matricula);
 
-
+			IVC* caracter[6];
 			float r = 0;
+			int k = 0;
 			int areatotal = matricula->height * matricula->width;
 			for (int j = 0; j < nletras; j++)
 			{
 				r = (float)letras[j].width / (float)letras[j].height;
-				if (r >= 0.4 && r < 1 && letras[j].area > areatotal * 0.005)
+				if (r >= 0.4 && r < 1 && letras[j].area > areatotal * 0.0065)
 				{
 					for (int x = xmin + letras[j].x; x < xmin + letras[j].x + letras[j].width; x++)
 					{
@@ -467,18 +469,45 @@ void Frame(IVC* frame)
 						}
 					}
 
+					caracter[k] = vc_image_new(letras[j].width + 2, letras[j].height + 2, 1, 255);
+					posk = 0;
+					pos = 0;
+					xk = 0;
+					yk = 0;
+					for (int y = letras[j].y - 1; y < letras[j].y + letras[j].height + 1; y++)
+					{
+						for (int x = letras[j].x - 1; x < letras[j].x + letras[j].width + 1; x++)
+						{
+							pos = y * mc->width + x;
+							posk = yk * (letras[j].width + 2) + xk;
+							caracter[k]->data[posk] = mc->data[pos];
+							xk++;
+						}
+						yk++;
+						xk = 0;
+					}
+					
+					vc_write_image((char*)"caracter.pgm" , caracter[k]);
+					k++;
+
 
 				}
 			}
+
+			char c[6];
+
+			//for (int i = 0; i < 6; i++)
+			//{
+			//	Qual é o caracter (caracter[i]);
+			//	c[i] = caracter[i];
+			//}
+
+
 			free(letras);
 			free(mb);
 			free(mc);
-		}
-
-
-		
-		free(matricula);
-		
+		}		
+		free(matricula);		
 		free(rc);
 		free(rb);
 		free(row);

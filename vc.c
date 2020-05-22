@@ -470,7 +470,7 @@ int vc_rgb_to_gray(IVC* src, IVC* dst)
 		{
 			pos = y * src->bytesperline + x * src->channels;
 			i = y * dst->bytesperline + x * dst->channels;
-			dst->data[i] = (unsigned char) ((float)src->data[pos]) * 0.299 + ((float)src->data[pos + 1]) * 0.587 + ((float)src->data[pos + 2]) * 0.114;
+			dst->data[i] = (unsigned char) ((float)src->data[pos + 2]) * 0.299 + ((float)src->data[pos + 1]) * 0.587 + ((float)src->data[pos]) * 0.114;
 		}
 	}
 	
@@ -894,7 +894,7 @@ int vc_binary_erode(IVC* src, IVC* dst, int kernel)
 					{
 						posk = (y + ky) * src->bytesperline + (x + kx) * src->channels;//Calculo da posição de offset em relação ao pixel que estamos;
 
-						if (src->data[posk] == 0 && posk < src->height * src->width)val = 1;
+						if (posk < src->height * src->width && src->data[posk] == 0 )val = 1;
 					}
 				}
 			}
