@@ -12,6 +12,51 @@ extern "C" {
 }
 
 int BoundingBox(IVC* src);
+void Frame(IVC* frame);
+bool AnalisaBlob(OVC* blob, IVC* frameg);
+bool IsPlate(IVC* blob);
+int vhistogram(int h[], int n, int kernel, int cmin);
+int* GetRowProf(IVC* image, int y);
+int* GetColunmProf(IVC* image);
+
+
+int* BinHHist(IVC* image)
+{
+	int* h = (int*)calloc(image->height, sizeof(int));
+	int pos = 0;
+	for (int y = 0; y < image->height; y++)
+	{
+
+		for (int x = 0; x < image->width; x++)
+		{
+			pos = y * image->bytesperline + x;
+
+			if (image->data[pos] == (unsigned char)255)h[y] = h[y] + 1;
+		}
+
+	}
+
+	return h;
+}
+
+int* BinVHist(IVC* image)
+{
+	int* v = (int*)calloc(image->width, sizeof(int));
+	int pos = 0;
+	for (int x = 0; x < image->width; x++)
+	{
+
+		for (int y = 0; y < image->height; y++)
+		{
+			pos = y * image->bytesperline + x;
+
+			if (image->data[pos] == 255)v[x] = v[x] + 1;
+		}
+
+	}
+
+	return v;
+}
 
 
 void vc_timer(void) {
@@ -118,8 +163,8 @@ int main(void) {
 		memcpy(image->data, frame.data, video.width * video.height * 3);
 		// Executa uma função da nossa biblioteca vc
 		//vc_rgb_get_green(image);
-		BoundingBox(image);			
-
+		//BoundingBox(image);			
+		Frame(image);
 		// Copia dados de imagem da estrutura IVC para uma estrutura cv::Mat
 		memcpy(frame.data, image->data, video.width * video.height * 3);
 		// Liberta a memória da imagem IVC que havia sido criada
@@ -146,16 +191,441 @@ int main(void) {
 	return 0;
 }
 
-int Frame(IVC* frame)
+
+void Frame(IVC* frame)
 {
+	IVC* frameg = vc_image_new(frame->width, frame->height, 1, 255);
+	vc_rgb_to_gray(frame, frameg);
+
+	int *h;
+	int pos = 0;
+	int v;
+	int lmc = 20;
+	int amc = 50;
+	int width = frame->width;
+	int ymin = 0;
+	int ymax = 0;
+	for (int y = 0; y < frameg->height; y = y + amc)
+	{
+
+		h = GetRowProf(frameg, y);		
+		int v = vhistogram(h, width, lmc, 100);		
+		if (v >= 6 && v <= 13)
+		{
+			//for (int x = 0; x < frame->width; x++)
+			//{
+			//	pos = y * frame->bytesperline + x * frame->channels;
+			//	frame->data[pos] = (unsigned char)255;
+			//	frame->data[pos + 1] = (unsigned char)255;
+			//	frame->data[pos + 2] = (unsigned char)255;
+
+			//}
+
+			int* yh;
+			int yv = 0;
+			int i = y - amc;
+			do
+			{
+				yh = GetRowProf(frameg,i);
+				yv = vhistogram(yh, width, lmc, 100);
+
+				if (yv >= 6 && yv <= 13)
+				{
+					if (i < y && i >= 10)
+					{
+						ymin = i - 10;
+						free(yh);
+						break;
+					}
+				}
+				i++;
+				free(yh);
+			} while (i < y);
+
+			
+
+			i = y + amc;
+			do
+			{
+				yh = GetRowProf(frameg, i);
+				yv = vhistogram(yh, width, lmc, 100);
+
+				if (yv >= 6 && yv <= 13)
+				{
+					if (i > y && i >= 0)
+					{
+						ymax = i + 10;
+						free(yh);
+						break;
+					}
+				}
+				free(yh);
+				i--;
+			} while (i > y);
+
+
+
+
+			//for (int x = 0; x < frame->width; x++)
+			//{
+			//	pos = y * frame->bytesperline + x * frame->channels;
+			//	frame->data[pos] = (unsigned char)255;
+			//	frame->data[pos + 1] = (unsigned char)255;
+			//	frame->data[pos + 2] = (unsigned char)255;
+			//}
+
+		}
+
+		free(h);
+
+	}
+
+	int height = ymax - ymin;
+	int xmin = 0, xmax = 0;
+
+	if (height > 10 && height < 200)
+	{
+		IVC* row = vc_image_new(frameg->width, height, 1, 255);
+
+		int posk = 0, yk = 0;
+		for (int y = ymin; y < ymax; y++)
+		{
+			for (int x = 0; x < row->width; x++)
+			{
+				pos = y * row->width + x;
+				posk = yk * row->width + x;
+				if (posk >= 0 && pos >= 0 && posk <= row->width * row->height && pos <= frameg->width * frameg->height)
+				{
+					row->data[posk] = frameg->data[pos];
+				}
+			}
+			yk++;
+		}
+		int b = 0;
+		//vc_write_image((char*)"row.pgm", row);
+		IVC* rb = vc_image_new(row->width, row->height, 1, 255);
+		vc_gray_to_binary_bernsen(row, rb, 5, 220);
+		//vc_write_image((char *)"rowb.pgm", rb);
+		IVC *rc = vc_image_new(row->width, row->height, 1, 255);
+		vc_binary_open(rb, rc, 5);
+		//vc_write_image((char*)"rowc.pgm", rc);
+
+		int* hv = BinVHist(rc);
+		int* hh = BinHHist(rc);
 	
+		for (int i = (int)rc->width/2; i > 0; i--)
+		{
+			if (hv[i] == 0) {
+				xmin = i - 1;
+				break;
+			}
+		}
+		for (int i = (int)rc->width / 2; i < rc->width; i++)
+		{
+			if (hv[i] == 0) {
+				xmax = i + 1;
+				break;
+			}
+		}
+
+		free(hv);
+		free(hh);
+	
+		for (int x = xmin; x < xmax; x++)
+		{
+			pos = ymin * frame->bytesperline + x * frame->channels;
+			if (pos > 0 && pos < frame->height * frame->bytesperline)
+			{
+				frame->data[pos] = (unsigned char)0;
+				frame->data[pos + 1] = (unsigned char)255;
+				frame->data[pos + 2] = (unsigned char)0;
+			}
+		}
+
+		for (int x = xmin; x < xmax; x++)
+		{
+			pos = ymax * frame->bytesperline + x * frame->channels;
+			if (pos > 0 && pos < frame->height * frame->bytesperline)
+			{
+				frame->data[pos] = (unsigned char)0;
+				frame->data[pos + 1] = (unsigned char)255;
+				frame->data[pos + 2] = (unsigned char)0;
+			}
+		}
+
+		for (int y = ymin; y < ymax; y++)
+		{
+			pos = y * frame->bytesperline + xmin * frame->channels;
+			if (pos > 0 && pos < frame->height * frame->bytesperline)
+			{
+				frame->data[pos] = (unsigned char)0;
+				frame->data[pos + 1] = (unsigned char)255;
+				frame->data[pos + 2] = (unsigned char)0;
+			}
+		}
+
+		for (int y = ymin; y < ymax; y++)
+		{
+			pos = y * frame->bytesperline + xmax * frame->channels;
+			if (pos > 0 && pos < frame->height * frame->bytesperline)
+			{
+				frame->data[pos] = (unsigned char)0;
+				frame->data[pos + 1] = (unsigned char)255;
+				frame->data[pos + 2] = (unsigned char)0;
+			}
+		}
+
+		
+		int width = xmax - xmin;
+		IVC* matricula = vc_image_new(width, height, 1, 255);
+		yk = 0;
+		pos = 0;
+		posk = 0;
+		int xk = 0;
+
+		for (int y = ymin; y < ymax; y++)
+		{
+			for (int x = xmin; x < xmax; x++)
+			{
+				pos = y * frameg->width + x;
+				posk = yk * width + xk;
+				matricula->data[posk] = frameg->data[pos];
+				xk++;
+			}
+			yk++;
+			xk = 0;
+		}
+		
+		if (matricula != NULL)
+		{
+			//vc_write_image((char*)"matricula.pgm", matricula);
+			IVC* mb = vc_image_new(matricula->width, matricula->height, 1, 255);
+			//vc_gray_edge_prewitt(matricula, mb, 0.8);
+			vc_gray_to_binary_bernsen(matricula, mb, 5, 100);
+			//vc_write_image((char*)"mb.pgm", mb);		
+			IVC* mc = vc_image_new(matricula->width, matricula->height, 1, 255);
+			vc_binary_open(mb, mc, 3);
+			//vc_write_image((char*)"mo.pgm", mc);
+			vc_bin_negative(mc);
+			//vc_write_image((char*)"mn.pgm", mc);
+
+			int nletras = 0;
+			OVC* letras = vc_binary_blob_labelling(mc, matricula, &nletras);
+			vc_binary_blob_info(matricula, letras, nletras);
+
+			//vc_write_image((char*)"ml.pgm", matricula);
+
+
+			float r = 0;
+			int areatotal = matricula->height * matricula->width;
+			for (int j = 0; j < nletras; j++)
+			{
+				r = (float)letras[j].width / (float)letras[j].height;
+				if (r >= 0.4 && r < 1 && letras[j].area > areatotal * 0.005)
+				{
+					for (int x = xmin + letras[j].x; x < xmin + letras[j].x + letras[j].width; x++)
+					{
+						pos = (ymin + letras[j].y) * frame->bytesperline + x * frame->channels;
+						if (pos > 0 && pos < frame->height * frame->bytesperline)
+						{
+							frame->data[pos] = (unsigned char)0;
+							frame->data[pos + 1] = (unsigned char)255;
+							frame->data[pos + 2] = (unsigned char)0;
+						}
+					}
+
+					for (int x = xmin + letras[j].x; x < xmin + letras[j].x + letras[j].width; x++)
+					{
+						pos = (ymin + letras[j].y + letras[j].height) * frame->bytesperline + x * frame->channels;
+						if (pos > 0 && pos < frame->height * frame->bytesperline)
+						{
+							frame->data[pos] = (unsigned char)0;
+							frame->data[pos + 1] = (unsigned char)255;
+							frame->data[pos + 2] = (unsigned char)0;
+						}
+					}
+
+					for (int y = ymin + letras[j].y; y < ymin + letras[j].y + letras[j].height; y++)
+					{
+						pos = y * frame->bytesperline + (xmin + letras[j].x) * frame->channels;
+						if (pos > 0 && pos < frame->height * frame->bytesperline)
+						{
+							frame->data[pos] = (unsigned char)0;
+							frame->data[pos + 1] = (unsigned char)255;
+							frame->data[pos + 2] = (unsigned char)0;
+						}
+					}
+
+					for (int y = ymin + letras[j].y; y < ymin + letras[j].y + letras[j].height; y++)
+					{
+						pos = y * frame->bytesperline + (xmin + letras[j].x + letras[j].width) * frame->channels;
+						if (pos > 0 && pos < frame->height * frame->bytesperline)
+						{
+							frame->data[pos] = (unsigned char)0;
+							frame->data[pos + 1] = (unsigned char)255;
+							frame->data[pos + 2] = (unsigned char)0;
+						}
+					}
+
+
+				}
+			}
+			free(letras);
+			free(mb);
+			free(mc);
+		}
+
+
+		
+		free(matricula);
+		
+		free(rc);
+		free(rb);
+		free(row);
+		
+		
+	}
+
+	free(frameg);
+
 }
 
-int IsPlate(IVC* blob)
+
+
+int* GetColunmProf(IVC* image)
 {
+	int x, y, soma, pos;
+	int* h = (int *)malloc(sizeof(int) * image->width);
 
+
+	for (x = 0; x < image->width; x++)
+	{
+		soma = 0;
+
+		for (y = 0; y < image->height; y++)
+		{
+			pos = y * image->bytesperline + x;
+
+			if (image->data[pos] == 0)soma++;
+		}
+		h[x] = soma;
+	}
+	return h;
 }
 
+
+int *GetRowProf(IVC* image, int y)
+{
+	int pos = 0;
+	int *h = (int*)malloc(sizeof(int) * image->width);
+	
+	for (int x = 0; x < image->width; x++)
+	{
+		pos = y * image->bytesperline + x * image->channels;
+		if (pos > 0 && pos < image->height * image->width)
+		{
+			h[x] = (int)image->data[pos];
+			
+		}
+	}
+	return h;
+}
+
+
+int vhistogram(int h[], int n, int kernel, int cmin)
+{
+	int max, min;
+	int v = 0;
+	for (int i = 0; i < n; i = i + kernel)
+	{
+		max = 0;
+		min = 255;
+		int c = i;
+		max = h[c];
+		for (c = i + 1; c < i + kernel; c++) {
+			if (h[c] > max) {
+				max = h[c];
+			}
+		}
+		c = i;
+		min = h[c];
+		for (c = i + 1; c < i + kernel; c++) {
+			if (h[c] < min) {
+				min = h[c];
+			}
+		}
+
+		if (max - min > cmin)v++;
+	}
+	return v;
+}
+
+
+bool AnalisaBlob(OVC* blob, IVC * frameg)
+{
+	int height = blob->height;
+	int width = blob->width;
+	int area = blob->area;
+	float r = width / height;
+	if (height > 0 && width > 0)
+	{
+		IVC* b = vc_image_new(width, height, 1, 255);
+		int pos = 0;
+		int posb = 0;//Posição na imagem para o blob
+		int xb = 0, yb = 0;
+		//Copiar o blob encontrado, da imagem original para um imagem nova para ser analisado
+		for (int y = blob->y; y < height + blob->y; y++)
+		{
+			for (int x = blob->x; x < width + blob->x; x++)
+			{
+				pos = y * frameg->width + x;//Posição na imagem original
+				posb = yb * width + xb;//Posição na imagem do blob
+				b->data[posb] = frameg->data[pos];//Copiar os dados
+				xb++;//Incrementar uma coluna á posição no blob
+			}
+			yb++;//Incrementar uma linha á posição no blob
+			xb = 0;//Por a posição nas colunas do blob a zero
+		}
+
+		if (IsPlate(b))
+		{
+			free(b);
+			return true;
+		}
+
+		free(b);
+		return false;
+	}
+	else return false;
+}
+
+
+bool IsPlate(IVC* blob)
+{
+	int height = blob->height;
+	int width = blob->width;
+	IVC* bin = vc_image_new(width, height, 1, 255);
+	vc_gray_to_binary_bernsen(blob, bin, 5, 240);
+	IVC* labeled = vc_image_new(width, height, 1, 255);
+	int labels = 0;//Variável para o número de labels encontrados
+	OVC* blobs = vc_binary_blob_labelling(bin, labeled, &labels);
+	vc_binary_blob_info(labeled, blobs, labels);
+
+	if (labels >= 5)
+	{
+		free(bin);
+		free(labeled);
+		free(blobs);
+		return true;
+	}
+	else 
+	{
+		free(bin);
+		free(labeled);
+		free(blobs);
+		return false;
+	}
+}
 
 
 int BoundingBox(IVC* src)
