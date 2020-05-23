@@ -11,14 +11,21 @@ extern "C" {
 #include "vc.h"
 }
 
+
+
 int BoundingBox(IVC* src);
-void Frame(IVC* frame);
-bool AnalisaBlob(OVC* blob, IVC* frameg);
-bool IsPlate(IVC* blob);
+void Frame(IVC* frame, char *c);
 int vhistogram(int h[], int n, int kernel, int cmin);
 int* GetRowProf(IVC* image, int y);
 int* GetColunmProf(IVC* image);
-
+void mediaMovel(double* histograma, int n);
+double* HistogramaHorizontalF(IVC* image);
+double* HistogramaVerticalF(IVC* image);
+void normalizaHist(double* histograma, int n, int totalPixeis);
+char IdentificaCaracter(IVC* image);
+int* IndexPicos(double* histograma, int n, int* npicos);
+float Media(double* hist, int n);
+char IdentificaDigito(IVC* image);
 
 int* BinHHist(IVC* image)
 {
@@ -79,6 +86,8 @@ void vc_timer(void) {
 		std::cin.get();
 	}
 }
+
+
 
 
 int main(void) {
@@ -154,7 +163,6 @@ int main(void) {
 		cv::putText(frame, str, cv::Point(20, 100), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0, 0, 0), 2);
 		cv::putText(frame, str, cv::Point(20, 100), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(255, 255, 255), 1);
 
-
 		// Faça o seu código aqui...
 		// Cria uma nova imagem IVC
 		IVC* image = vc_image_new(video.width, video.height, 3, 255);
@@ -163,13 +171,22 @@ int main(void) {
 		memcpy(image->data, frame.data, video.width * video.height * 3);
 		// Executa uma função da nossa biblioteca vc
 		//vc_rgb_get_green(image);
-		//BoundingBox(image);			
-		Frame(image);
+		//BoundingBox(image);
+		char *matricula = (char*)calloc(6,sizeof(char));
+
+		Frame(image, matricula);
 		// Copia dados de imagem da estrutura IVC para uma estrutura cv::Mat
 		memcpy(frame.data, image->data, video.width * video.height * 3);
 		// Liberta a memória da imagem IVC que havia sido criada
 		vc_image_free(image);
 		// +++++++++++++++++++++++++
+
+		std::string m;
+		std::stringstream ss;
+		ss << matricula;
+		ss >> m;
+		cv::putText(frame, m, cv::Point(20, 125), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0, 0, 0), 2);
+		cv::putText(frame, m, cv::Point(20, 125), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(255, 255, 255), 1);
 
 		/* Exibe a frame */
 		cv::imshow("VC - VIDEO", frame);
@@ -192,7 +209,7 @@ int main(void) {
 }
 
 
-void Frame(IVC* frame)
+void Frame(IVC* frame, char* c)
 {
 	IVC* frameg = vc_image_new(frame->width, frame->height, 1, 255);
 	vc_rgb_to_gray(frame, frameg);
@@ -417,6 +434,8 @@ void Frame(IVC* frame)
 			//vc_write_image((char*)"ml.pgm", matricula);
 
 			IVC* caracter[6];
+			for (int i = 0; i < 6; i++)caracter[i] = NULL;
+
 			float r = 0;
 			int k = 0;
 			int areatotal = matricula->height * matricula->width;
@@ -487,20 +506,27 @@ void Frame(IVC* frame)
 						xk = 0;
 					}
 					
-					vc_write_image((char*)"caracter.pgm" , caracter[k]);
+					//vc_write_image((char*)"caracter.pgm" , caracter[k]);
 					k++;
 
 
 				}
 			}
 
-			char c[6];
+
+			for (int i = 0; i < 6; i++)
+			{
+				//vc_write_image((char*)"caracter.pgm", caracter[i]);
+				c[i] = IdentificaCaracter(caracter[i]);
+			}
 
 			//for (int i = 0; i < 6; i++)
 			//{
-			//	Qual é o caracter (caracter[i]);
-			//	c[i] = caracter[i];
+			//	printf("%c\n", c[i]);
 			//}
+
+
+
 
 
 			free(letras);
@@ -519,6 +545,151 @@ void Frame(IVC* frame)
 
 }
 
+
+double* HistogramaHorizontalF(IVC* image)
+{
+	double* h = (double*)calloc(image->height, sizeof(double));
+	int pos = 0;
+	for (int y = 0; y < image->height; y++)
+	{
+
+		for (int x = 0; x < image->width; x++)
+		{
+			pos = y * image->bytesperline + x;
+
+			if (image->data[pos] == (unsigned char)255)h[y] = h[y] + 1;
+		}
+
+	}
+
+	return h;
+}
+
+double* HistogramaVerticalF(IVC* image)
+{
+	double* v = (double*)calloc(image->width, sizeof(double));
+	int pos = 0;
+	for (int x = 0; x < image->width; x++)
+	{
+		for (int y = 0; y < image->height; y++)
+		{
+			pos = y * image->width + x;
+
+			if (image->data[pos] == (unsigned char)255)v[x] = v[x] + 1;
+		}
+
+	}
+	return v;
+}
+
+
+char IdentificaCaracter(IVC* image)
+{
+	if (image != NULL)
+	{
+		IVC* open = vc_image_new(image->width, image->height, 1, 255);
+		vc_binary_open(image, open, 3);
+		double* histVertical = HistogramaVerticalF(open);
+		double* histHorizontal = HistogramaHorizontalF(open);
+		char caracter;
+
+		mediaMovel(histHorizontal, image->height);
+		mediaMovel(histVertical, image->width);
+		normalizaHist(histHorizontal, image->height, image->width);
+		normalizaHist(histVertical, image->width, image->height);
+		int npicosH = 0;
+		int npicosV = 0;
+		int* picosH = IndexPicos(histHorizontal, image->height, &npicosH);
+		int* picosV = IndexPicos(histVertical, image->width, &npicosV);
+
+		//printf("%d\n", npicosH);
+		//printf("%d\n", npicosV);
+
+		//for (int i = 0; i < npicosH; i++)printf("Index: %d --> %f\n", picosH[i], histHorizontal[picosH[i]]);
+		//for (int i = 0; i < npicosV; i++)printf("Index: %d --> %f\n", picosV[i], histVertical[picosV[i]]);
+
+
+		if (npicosH == 1 && (npicosV == 1 || npicosV == 2))return '7';
+		if (npicosH == 3 && npicosV == 2 && histVertical[picosV[1]] > histVertical[picosV[0]] && histHorizontal[picosH[1]] < histHorizontal[picosH[2]])return 'Q';
+		if (npicosH == 2 && npicosV == 2 && histVertical[picosV[0]] > histVertical[picosV[1]])return 'R';
+		if (npicosH == 3 && npicosV == 2 && histHorizontal[picosH[1]] > histHorizontal[picosH[2]] && histVertical[picosV[1]] > histVertical[picosV[0]] && histHorizontal[picosH[1]] > histHorizontal[picosH[0]])return '9';
+		if (npicosH == 5 && npicosV == 2)return '8';
+
+	}
+}
+
+float Media(double* hist, int n)
+{
+	int soma = 0;
+	for (int i = 0; i < n; i++)
+	{
+		soma = soma + hist[i];
+	}
+	return soma / n;
+}
+
+
+int* IndexPicos(double* histograma, int n, int *npicos)
+{
+	int picos[30];
+	for (int i = 0; i < 30; i++)picos[i] = 0;
+	int j = 0;
+	int k = 0;
+	while(j < n - 1)
+	{
+		if (histograma[j] < histograma[j + 1])
+		{
+			while (histograma[j] < histograma[j + 1])
+			{
+				j++;
+			}
+			if (histograma[j] >= 0.4)
+			{
+				picos[k] = j;
+				k++;
+			}
+		}
+		else
+		{
+			j++;
+		}
+	}
+
+	int* p = (int*)calloc(k, sizeof(int));
+	for (int i = 0; i < k; i++)
+	{
+		p[i] = picos[i];
+	}
+	*npicos = k;
+	return p;
+}
+
+
+void normalizaHist(double* histograma, int n, int totalPixeis)
+{
+	if (totalPixeis > 0)
+	{
+		for (int i = 0; i < n; i++)
+		{
+			histograma[i] = (histograma[i] / totalPixeis);
+		}
+	}
+}
+
+
+void mediaMovel(double* histograma, int n)
+{
+	float soma = 0;
+	for (int i = 0; i < n; i++)
+	{
+		for (int j = i - 2; j <= i + 2; j++)
+		{
+			if(j < n && j >= 0) soma = soma + histograma[j];
+		}
+		histograma[i] = soma / 5;
+		soma = 0;
+	}
+}
 
 
 int* GetColunmProf(IVC* image)
@@ -590,71 +761,10 @@ int vhistogram(int h[], int n, int kernel, int cmin)
 }
 
 
-bool AnalisaBlob(OVC* blob, IVC * frameg)
-{
-	int height = blob->height;
-	int width = blob->width;
-	int area = blob->area;
-	float r = width / height;
-	if (height > 0 && width > 0)
-	{
-		IVC* b = vc_image_new(width, height, 1, 255);
-		int pos = 0;
-		int posb = 0;//Posição na imagem para o blob
-		int xb = 0, yb = 0;
-		//Copiar o blob encontrado, da imagem original para um imagem nova para ser analisado
-		for (int y = blob->y; y < height + blob->y; y++)
-		{
-			for (int x = blob->x; x < width + blob->x; x++)
-			{
-				pos = y * frameg->width + x;//Posição na imagem original
-				posb = yb * width + xb;//Posição na imagem do blob
-				b->data[posb] = frameg->data[pos];//Copiar os dados
-				xb++;//Incrementar uma coluna á posição no blob
-			}
-			yb++;//Incrementar uma linha á posição no blob
-			xb = 0;//Por a posição nas colunas do blob a zero
-		}
-
-		if (IsPlate(b))
-		{
-			free(b);
-			return true;
-		}
-
-		free(b);
-		return false;
-	}
-	else return false;
-}
 
 
-bool IsPlate(IVC* blob)
-{
-	int height = blob->height;
-	int width = blob->width;
-	IVC* bin = vc_image_new(width, height, 1, 255);
-	vc_gray_to_binary_bernsen(blob, bin, 5, 240);
-	IVC* labeled = vc_image_new(width, height, 1, 255);
-	int labels = 0;//Variável para o número de labels encontrados
-	OVC* blobs = vc_binary_blob_labelling(bin, labeled, &labels);
-	vc_binary_blob_info(labeled, blobs, labels);
 
-	if (labels >= 5)
-	{
-		free(bin);
-		free(labeled);
-		free(blobs);
-		return true;
-	}
-	else 
-	{
-		free(bin);
-		free(labeled);
-		free(blobs);
-		return false;
-	}
-}
+
 
 
 int BoundingBox(IVC* src)
