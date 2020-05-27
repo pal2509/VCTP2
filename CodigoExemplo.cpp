@@ -27,6 +27,7 @@ int* IndexPicos(double* histograma, int n, int* npicos);
 float Media(double* hist, int n);
 char IdentificaDigito(IVC* image);
 
+//Histograma horizontal de uma imagem binario
 int* BinHHist(IVC* image)
 {
 	int* h = (int*)calloc(image->height, sizeof(int));
@@ -46,6 +47,7 @@ int* BinHHist(IVC* image)
 	return h;
 }
 
+//Histograma horizontal de uma imagem binario
 int* BinVHist(IVC* image)
 {
 	int* v = (int*)calloc(image->width, sizeof(int));
@@ -64,7 +66,6 @@ int* BinVHist(IVC* image)
 
 	return v;
 }
-
 
 void vc_timer(void) {
 	static bool running = false;
@@ -173,14 +174,18 @@ int main(void) {
 		//vc_rgb_get_green(image);
 		//BoundingBox(image);
 		char *matricula = (char*)calloc(6,sizeof(char));
-
-		Frame(image, matricula);
+		try {
+			Frame(image, matricula);
+		}
+		catch(std::exception e)
+		{ }
 		// Copia dados de imagem da estrutura IVC para uma estrutura cv::Mat
 		memcpy(frame.data, image->data, video.width * video.height * 3);
 		// Liberta a memória da imagem IVC que havia sido criada
 		vc_image_free(image);
 		// +++++++++++++++++++++++++
 
+		//Escrita da matricula no frame
 		std::string m;
 		std::stringstream ss;
 		ss << matricula;
@@ -192,7 +197,8 @@ int main(void) {
 		cv::imshow("VC - VIDEO", frame);
 
 		/* Sai da aplicação, se o utilizador premir a tecla 'q' */
-		key = cv::waitKey(1);
+		if (cv::waitKey(1) == 'q')
+			while (cv::waitKey(1) != 'q');
 	}
 
 
@@ -208,21 +214,22 @@ int main(void) {
 	return 0;
 }
 
-
+//Funçao para a analise de um frame e desenho das caixas delimitadoras da matricula e das letras
 void Frame(IVC* frame, char* c)
 {
-	IVC* frameg = vc_image_new(frame->width, frame->height, 1, 255);
-	vc_rgb_to_gray(frame, frameg);
+	IVC* frameg = vc_image_new(frame->width, frame->height, 1, 255);//imagem para o frame
+	vc_rgb_to_gray(frame, frameg);//conversão de rgb para binário
 	vc_write_image((char*)"frameg.pgm", frameg);
 
 	int *h;
 	int pos = 0;
 	int v;
-	int lmc = 20;
-	int amc = 50;
-	int width = frame->width;
+	int lmc = 20;//largura minima do caracter
+	int amc = 50;//altura minima do caracter
+	int width = frame->width;//largura do frame
 	int ymin = 0;
 	int ymax = 0;
+	//Ciclo para percorrer o frame linha a linha com incrementos de amc
 	for (int y = 0; y < frameg->height; y = y + amc)
 	{
 
@@ -283,9 +290,6 @@ void Frame(IVC* frame, char* c)
 				i--;
 			} while (i > y);
 
-
-
-
 			//for (int x = 0; x < frame->width; x++)
 			//{
 			//	pos = y * frame->bytesperline + x * frame->channels;
@@ -293,16 +297,12 @@ void Frame(IVC* frame, char* c)
 			//	frame->data[pos + 1] = (unsigned char)255;
 			//	frame->data[pos + 2] = (unsigned char)255;
 			//}
-
 		}
-
-		free(h);
-
+		free(h);		
 	}
 
-	int height = ymax - ymin;//calcular a altura da matricula
+	int height = ymax - ymin;//Calcular a altura da matricula
 	int xmin = 0, xmax = 0;
-
 	
 	if (height > 10 && height < 200)
 	{
@@ -326,7 +326,7 @@ void Frame(IVC* frame, char* c)
 		int b = 0;
 		//vc_write_image((char*)"row.pgm", row);
 		IVC* rb = vc_image_new(row->width, row->height, 1, 255);
-		vc_gray_to_binary_bernsen(row, rb, 5, 230);//binarização
+		vc_gray_to_binary_bernsen(row, rb, 5, 230);//Conversão de escala de cinzentos para binário
 		//vc_write_image((char *)"rowb.pgm", rb);
 		IVC *rc = vc_image_new(row->width, row->height, 1, 255);
 		vc_binary_open(rb, rc, 5);//Operação morfológica de abertura
@@ -399,9 +399,8 @@ void Frame(IVC* frame, char* c)
 				frame->data[pos + 2] = (unsigned char)0;
 			}
 		}
-
 		
-		int width = xmax - xmin;
+		int width = xmax - xmin;//Largura da matricula
 		IVC* matricula = vc_image_new(width, height, 1, 255);//Imagem para a matricula
 		yk = 0;
 		pos = 0;
@@ -414,7 +413,10 @@ void Frame(IVC* frame, char* c)
 			{
 				pos = y * frameg->width + x;
 				posk = yk * width + xk;
-				matricula->data[posk] = frameg->data[pos];
+				if (posk > 0 && posk < matricula->width * matricula->height && pos > 0 && pos < frameg->width * frameg->height);
+				{
+					matricula->data[posk] = frameg->data[pos];
+				}
 				xk++;
 			}
 			yk++;
@@ -426,17 +428,17 @@ void Frame(IVC* frame, char* c)
 			//vc_write_image((char*)"matricula.pgm", matricula);
 			IVC* mb = vc_image_new(matricula->width, matricula->height, 1, 255);
 			//vc_gray_edge_prewitt(matricula, mb, 0.8);
-			vc_gray_to_binary_bernsen(matricula, mb, 5, 150);
+			vc_gray_to_binary_bernsen(matricula, mb, 5, 150);//Conversão de escala de cinzentos para binário
 			//vc_write_image((char*)"mb.pgm", mb);		
 			IVC* mc = vc_image_new(matricula->width, matricula->height, 1, 255);
-			vc_binary_open(mb, mc, 3);
+			vc_binary_open(mb, mc, 3);//Operação morfológica de abertura
 			//vc_write_image((char*)"mo.pgm", mc);
-			vc_bin_negative(mc);
-			//vc_write_image((char*)"mn.pgm", mc);
+			vc_bin_negative(mc);//Negativo da matricula
+			vc_write_image((char*)"mn.pgm", mc);
 
 			int nletras = 0;
-			OVC* letras = vc_binary_blob_labelling(mc, matricula, &nletras);
-			vc_binary_blob_info(matricula, letras, nletras);
+			OVC* letras = vc_binary_blob_labelling(mc, matricula, &nletras);//Etiquetagem da imagem da matricula
+			vc_binary_blob_info(matricula, letras, nletras);//Preenchimento do array com informação das etiquetas da imagen
 
 			//vc_write_image((char*)"ml.pgm", matricula);
 
@@ -450,9 +452,9 @@ void Frame(IVC* frame, char* c)
 			for (int j = 0; j < nletras; j++)
 			{
 				r = (float)letras[j].width / (float)letras[j].height;
-				if (r >= 0.4 && r < 1 && letras[j].area > areatotal * 0.0065)
+				if (r >= 0.4 && r < 1 && letras[j].area > areatotal * 0.0065)//Condições que determinam o quq é um caracter
 				{
-					//desenho das caixas delimitadoras á volta da letraa
+					//desenho das caixas delimitadoras á volta da letras
 					for (int x = xmin + letras[j].x; x < xmin + letras[j].x + letras[j].width; x++)
 					{
 						pos = (ymin + letras[j].y) * frame->bytesperline + x * frame->channels;
@@ -497,7 +499,7 @@ void Frame(IVC* frame, char* c)
 						}
 					}
 
-
+					//Criar uma imagem nova no array para o caracter encontrado 
 					caracter[k] = vc_image_new(letras[j].width + 2, letras[j].height + 2, 1, 255);//Uma imagem nova para cada caracter
 					posk = 0;
 					pos = 0;
@@ -519,15 +521,13 @@ void Frame(IVC* frame, char* c)
 					
 					//vc_write_image((char*)"caracter.pgm" , caracter[k]);
 					k++;
-
-
 				}
 			}
 
 			//identificação dos 6 caracteres
 			for (int i = 0; i < 6; i++)
 			{
-				//vc_write_image((char*)"caracter.pgm", caracter[i]);
+				vc_write_image((char*)"caracter.pgm", caracter[i]);
 				c[i] = IdentificaCaracter(caracter[i]);
 			}
 
@@ -536,10 +536,7 @@ void Frame(IVC* frame, char* c)
 			//	printf("%c\n", c[i]);
 			//}
 
-
-
-
-
+			free(c);
 			free(letras);
 			free(mb);
 			free(mc);
@@ -547,16 +544,12 @@ void Frame(IVC* frame, char* c)
 		free(matricula);		
 		free(rc);
 		free(rb);
-		free(row);
-		
-		
+		free(row);		
 	}
-
 	free(frameg);
-
 }
 
-
+//Histograma horizontal de uma imagem binaria
 double* HistogramaHorizontalF(IVC* image)
 {
 	double* h = (double*)calloc(image->height, sizeof(double));
@@ -570,12 +563,11 @@ double* HistogramaHorizontalF(IVC* image)
 
 			if (image->data[pos] == (unsigned char)255)h[y] = h[y] + 1;
 		}
-
 	}
-
 	return h;
 }
 
+//Histograma vertical de uma imagem binaria
 double* HistogramaVerticalF(IVC* image)
 {
 	double* v = (double*)calloc(image->width, sizeof(double));
@@ -588,47 +580,61 @@ double* HistogramaVerticalF(IVC* image)
 
 			if (image->data[pos] == (unsigned char)255)v[x] = v[x] + 1;
 		}
-
 	}
 	return v;
 }
 
-
+//Função para identificar um caracter apartir de uma imagem
 char IdentificaCaracter(IVC* image)
 {
 	if (image != NULL)
 	{
 		IVC* open = vc_image_new(image->width, image->height, 1, 255);
 		vc_binary_open(image, open, 3);
+		vc_write_image((char*)"caractero.pgm", open);
+		//Histograma vertical e horizontal da imagem
 		double* histVertical = HistogramaVerticalF(open);
 		double* histHorizontal = HistogramaHorizontalF(open);
 		char caracter;
-
+		//Aplicar a media movel aos histogramas
 		mediaMovel(histHorizontal, image->height);
 		mediaMovel(histVertical, image->width);
+		//Aplicar a normalização aos histogramas
 		normalizaHist(histHorizontal, image->height, image->width);
 		normalizaHist(histVertical, image->width, image->height);
-		int npicosH = 0;
-		int npicosV = 0;
-		int* picosH = IndexPicos(histHorizontal, image->height, &npicosH);
-		int* picosV = IndexPicos(histVertical, image->width, &npicosV);
+		int npicosH = 0;//numero de picos no histograma horizontal
+		int npicosV = 0;//numero de picos no histograma vertical
+		int* picosH = IndexPicos(histHorizontal, image->height, &npicosH);//array com o os indices dos picos horizontais
+		int* picosV = IndexPicos(histVertical, image->width, &npicosV);//array com o os indices dos picos verticais
 
-		//printf("%d\n", npicosH);
-		//printf("%d\n", npicosV);
+		printf("%d\n", npicosH);
+		printf("%d\n", npicosV);
 
-		//for (int i = 0; i < npicosH; i++)printf("Index: %d --> %f\n", picosH[i], histHorizontal[picosH[i]]);
-		//for (int i = 0; i < npicosV; i++)printf("Index: %d --> %f\n", picosV[i], histVertical[picosV[i]]);
+		for (int i = 0; i < npicosH; i++)printf("Index: %d --> %f\n", picosH[i], histHorizontal[picosH[i]]);
+		for (int i = 0; i < npicosV; i++)printf("Index: %d --> %f\n", picosV[i], histVertical[picosV[i]]);
 
 
-		if (npicosH == 1 && (npicosV == 1 || npicosV == 2))return '7';
-		if (npicosH == 3 && npicosV == 2 && histVertical[picosV[1]] > histVertical[picosV[0]] && histHorizontal[picosH[1]] < histHorizontal[picosH[2]])return 'Q';
-		if (npicosH == 2 && npicosV == 2 && histVertical[picosV[0]] > histVertical[picosV[1]])return 'R';
-		if (npicosH == 3 && npicosV == 2 && histHorizontal[picosH[1]] > histHorizontal[picosH[2]] && histVertical[picosV[1]] > histVertical[picosV[0]] && histHorizontal[picosH[1]] > histHorizontal[picosH[0]])return '9';
-		if (npicosH == 5 && npicosV == 2)return '8';
+		//Reconehcimento da letra recebida através do numero de picos no histograma horizontal e vertical e pela posição relativa desses picos na imagem
+		if (npicosH == 1 && (npicosV == 1 || npicosV == 2) && picosH[0] < image->height / 3)return '7';
+		if (npicosH == 3 && (npicosV == 3 || npicosV == 2) && picosH[0] < image->height / 3 && picosH[2] > image->height * 2 / 3 && picosV[0] < image->width / 3 && picosV[1] > image->width * 2/3 && picosH[2] - picosH[1] < 10)return 'Q';
+		if ((npicosH == 1 || npicosH == 2) && npicosV == 2 && picosV[0] < image->width / 3 && image->width * (2 / 3) < picosV[1] && (picosH[0] > image->height * 2 / 3 || picosH[1] > image->height * 2 / 3))return 'U';
+		if (npicosH == 2 && (npicosV == 2 || npicosV == 3) && picosV[0] < image->width / 3)return 'R';
+		if (npicosH == 3 && npicosV == 2 && picosV[1] > image->width * 2 / 3 && histVertical[picosV[1]] > histVertical[picosV[0]] && picosH[2] - picosH[1] > 10)return '9';
+		if ((npicosH == 3 || npicosH == 4) && (npicosV == 3 || npicosV == 2) && picosV[0] < image->width / 3 && histVertical[picosV[0]] > histVertical[picosV[1]] && histHorizontal[picosH[1]]> histHorizontal[picosH[0]])return '6';
+		if ((npicosH == 4 || npicosH == 3 || npicosH == 5 || npicosH == 6) && npicosV == 2 && picosH[0] < image->height / 3 && picosV[0] < image->width / 3 && picosV[1] > image->width * 2/3 && picosH[1] < image->height * 2 / 3 && picosH[1] > image->height / 3)return '8';
+		if (npicosH == 2 && (npicosV == 1 || npicosV == 3) && picosH[1] > image->height * 2 / 3 && picosV[0] > image->width / 3 && picosV[0] < image->width * 2 / 3)return '2';
+		
 
+
+		free(open);
+		free(histHorizontal);                      
+		free(histVertical);
+		free(picosH);
+		free(picosV);                                                                                                                                      
 	}
 }
 
+//Faz a media de um histograma
 float Media(double* hist, int n)
 {
 	int soma = 0;
@@ -639,7 +645,7 @@ float Media(double* hist, int n)
 	return soma / n;
 }
 
-
+//Função para encontrar o indice dos picos de um histograma
 int* IndexPicos(double* histograma, int n, int *npicos)
 {
 	int picos[30];
@@ -675,7 +681,7 @@ int* IndexPicos(double* histograma, int n, int *npicos)
 	return p;
 }
 
-
+//Normaliza o histograma
 void normalizaHist(double* histograma, int n, int totalPixeis)
 {
 	if (totalPixeis > 0)
@@ -687,7 +693,7 @@ void normalizaHist(double* histograma, int n, int totalPixeis)
 	}
 }
 
-
+//Aplica a média movel a um histograma
 void mediaMovel(double* histograma, int n)
 {
 	float soma = 0;
@@ -702,12 +708,11 @@ void mediaMovel(double* histograma, int n)
 	}
 }
 
-
+//Histograma horizontal de uma imagem em escala de cinzentos
 int* GetColunmProf(IVC* image)
 {
 	int x, y, soma, pos;
 	int* h = (int *)malloc(sizeof(int) * image->width);
-
 
 	for (x = 0; x < image->width; x++)
 	{
@@ -724,7 +729,7 @@ int* GetColunmProf(IVC* image)
 	return h;
 }
 
-
+//Histograma vertical de uma imagem em escala de cinzentos
 int *GetRowProf(IVC* image, int y)
 {
 	int pos = 0;
@@ -742,7 +747,8 @@ int *GetRowProf(IVC* image, int y)
 	return h;
 }
 
-
+//Função para encontrar o numero de zonas de contraste de um histograma dividindo-o em várias partes iguais, encontrado o maximo e minimo em cada
+//uma dessas partes e fazendo a diferença entre eles.
 int vhistogram(int h[], int n, int kernel, int cmin)
 {
 	int max, min;
