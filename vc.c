@@ -430,7 +430,6 @@ int vc_rgb_get_green(IVC* srcdst)
 			srcdst->data[pos + 2] = srcdst->data[pos + 1];
 		}
 	}
-
 	return 1;
 }
 

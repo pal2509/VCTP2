@@ -25,7 +25,8 @@ void normalizaHist(double* histograma, int n, int totalPixeis);
 char IdentificaCaracter(IVC* image);
 int* IndexPicos(double* histograma, int n, int* npicos);
 float Media(double* hist, int n);
-char IdentificaDigito(IVC* image);
+int CalculaMediaDesvio(IVC* image, double* media, double* desvio);
+int vhistogramA(int h[], int n, int kernel, int cmin, bool* a);
 
 //Histograma horizontal de uma imagem binario
 int* BinHHist(IVC* image)
@@ -54,7 +55,6 @@ int* BinVHist(IVC* image)
 	int pos = 0;
 	for (int x = 0; x < image->width; x++)
 	{
-
 		for (int y = 0; y < image->height; y++)
 		{
 			pos = y * image->bytesperline + x;
@@ -63,14 +63,12 @@ int* BinVHist(IVC* image)
 		}
 
 	}
-
 	return v;
 }
 
 void vc_timer(void) {
 	static bool running = false;
 	static std::chrono::steady_clock::time_point previousTime = std::chrono::steady_clock::now();
-
 	if (!running) {
 		running = true;
 	}
@@ -150,23 +148,12 @@ int main(void) {
 		/* Número da frame a processar */
 		video.nframe = (int)capture.get(cv::CAP_PROP_POS_FRAMES);
 
-		/* Exemplo de inserção texto na frame */
-		str = std::string("RESOLUCAO: ").append(std::to_string(video.width)).append("x").append(std::to_string(video.height));
-		cv::putText(frame, str, cv::Point(20, 25), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0, 0, 0), 2);
-		cv::putText(frame, str, cv::Point(20, 25), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(255, 255, 255), 1);
-		str = std::string("TOTAL DE FRAMES: ").append(std::to_string(video.ntotalframes));
-		cv::putText(frame, str, cv::Point(20, 50), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0, 0, 0), 2);
-		cv::putText(frame, str, cv::Point(20, 50), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(255, 255, 255), 1);
-		str = std::string("FRAME RATE: ").append(std::to_string(video.fps));
-		cv::putText(frame, str, cv::Point(20, 75), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0, 0, 0), 2);
-		cv::putText(frame, str, cv::Point(20, 75), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(255, 255, 255), 1);
-		str = std::string("N. DA FRAME: ").append(std::to_string(video.nframe));
-		cv::putText(frame, str, cv::Point(20, 100), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0, 0, 0), 2);
-		cv::putText(frame, str, cv::Point(20, 100), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(255, 255, 255), 1);
+
 
 		// Faça o seu código aqui...
 		// Cria uma nova imagem IVC
 		IVC* image = vc_image_new(video.width, video.height, 3, 255);
+
 
 		// Copia dados de imagem da estrutura cv::Mat para uma estrutura IVC
 		memcpy(image->data, frame.data, video.width * video.height * 3);
@@ -179,12 +166,25 @@ int main(void) {
 		}
 		catch(std::exception e)
 		{ }
+
 		// Copia dados de imagem da estrutura IVC para uma estrutura cv::Mat
 		memcpy(frame.data, image->data, video.width * video.height * 3);
 		// Liberta a memória da imagem IVC que havia sido criada
 		vc_image_free(image);
 		// +++++++++++++++++++++++++
-
+				/* Exemplo de inserção texto na frame */
+		str = std::string("RESOLUCAO: ").append(std::to_string(video.width)).append("x").append(std::to_string(video.height));
+		cv::putText(frame, str, cv::Point(20, 25), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0, 0, 0), 2);
+		cv::putText(frame, str, cv::Point(20, 25), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(255, 255, 255), 1);
+		str = std::string("TOTAL DE FRAMES: ").append(std::to_string(video.ntotalframes));
+		cv::putText(frame, str, cv::Point(20, 50), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0, 0, 0), 2);
+		cv::putText(frame, str, cv::Point(20, 50), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(255, 255, 255), 1);
+		str = std::string("FRAME RATE: ").append(std::to_string(video.fps));
+		cv::putText(frame, str, cv::Point(20, 75), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0, 0, 0), 2);
+		cv::putText(frame, str, cv::Point(20, 75), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(255, 255, 255), 1);
+		str = std::string("N. DA FRAME: ").append(std::to_string(video.nframe));
+		cv::putText(frame, str, cv::Point(20, 100), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0, 0, 0), 2);
+		cv::putText(frame, str, cv::Point(20, 100), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(255, 255, 255), 1);
 		//Escrita da matricula no frame
 		std::string m;
 		std::stringstream ss;
@@ -219,24 +219,39 @@ void Frame(IVC* frame, char* c)
 {
 	IVC* frameg = vc_image_new(frame->width, frame->height, 1, 255);//imagem para o frame
 	vc_rgb_to_gray(frame, frameg);//conversão de rgb para binário
-	vc_write_image((char*)"frameg.pgm", frameg);
+	//vc_write_image((char*)"frameg.pgm", frameg);
 
 	int *h;
 	int pos = 0;
-	int v;
-	int lmc = 20;//largura minima do caracter
-	int amc = 50;//altura minima do caracter
+	
+	int lmc = frame->width * 0.05;//largura minima do caracter
+	int amc = frame->height * 0.0001 * frame->width;//altura minima do caracter
 	int width = frame->width;//largura do frame
 	int ymin = 0;
 	int ymax = 0;
 	//Ciclo para percorrer o frame linha a linha com incrementos de amc
 	for (int y = 0; y < frameg->height; y = y + amc)
 	{
-
-		h = GetRowProf(frameg, y);//histograma em escala de cinzento de uma determinada linha	
-		int v = vhistogram(h, width, lmc, 100);//Divide o histograma em partes iguas e faz a diferença de contrates dentro delas e conta as
+		int cmin = 100;
+		h = GetRowProf(frameg, y);//histograma em escala de cinzento de uma determinada linha
+		bool proximidade = false;
+		int v = vhistogramA(h, width, lmc, cmin, &proximidade);//Divide o histograma em partes iguas e faz a diferença de contrates dentro delas e conta as
 			//diferençãs que são superiores a 100
-		if (v >= 6 && v <= 13)//se houver entre 6 a 13 essa linha interceta a matricula
+
+		//for (int x = 0; x < frame->width; x++)
+		//{
+		//	pos = y * frame->bytesperline + x * frame->channels;
+		//	frame->data[pos] = (unsigned char)255;
+		//	frame->data[pos + 1] = (unsigned char)255;
+		//	frame->data[pos + 2] = (unsigned char)255;
+		//}
+		//for (int i = 0; i < width; i++)
+		//{
+		//	printf("%d->%d\n",i, h[i]);			
+		//}
+		//printf("V = %d\n", v);
+		//printf("P = %d\n", proximidade);
+		if (v >= 6 && v <= 13 && proximidade)//se houver entre 6 a 13 essa linha interceta a matricula e serem todas consecutivas
 		{
 			//for (int x = 0; x < frame->width; x++)
 			//{
@@ -244,23 +259,23 @@ void Frame(IVC* frame, char* c)
 			//	frame->data[pos] = (unsigned char)255;
 			//	frame->data[pos + 1] = (unsigned char)255;
 			//	frame->data[pos + 2] = (unsigned char)255;
-
 			//}
 
 			int* yh;
 			int yv = 0;
-			int i = y - amc;
+			int i = y - amc * 2;
+			proximidade = false;
 			//ciclo para encontrar o extremo superior da matricula
 			do
 			{
 				yh = GetRowProf(frameg,i);
-				yv = vhistogram(yh, width, lmc, 100);
-
-				if (yv >= 6 && yv <= 13)
+				yv = vhistogramA(yh, width, lmc, cmin,&proximidade);
+				//printf("%d\n", yv);
+				if (yv >= 6 && yv <= 13 && proximidade)
 				{
 					if (i < y && i >= 10)
 					{
-						ymin = i - 10;
+						ymin = i - lmc * 0.3;
 						free(yh);
 						break;
 					}
@@ -271,17 +286,18 @@ void Frame(IVC* frame, char* c)
 
 			
 			//ciclo para encontrar o extremo inferior da matricula
-			i = y + amc;
+			i = y + amc * 2;
+			proximidade = false;
 			do
 			{
 				yh = GetRowProf(frameg, i);
-				yv = vhistogram(yh, width, lmc, 100);
-
-				if (yv >= 6 && yv <= 13)
+				yv = vhistogramA(yh, width, lmc, cmin, &proximidade);
+				//printf("%d\n", yv);
+				if (yv >= 6 && yv <= 13 && proximidade)
 				{
 					if (i > y && i >= 0)
 					{
-						ymax = i + 10;
+						ymax = i + lmc * 0.3;
 						free(yh);
 						break;
 					}
@@ -304,7 +320,7 @@ void Frame(IVC* frame, char* c)
 	int height = ymax - ymin;//Calcular a altura da matricula
 	int xmin = 0, xmax = 0;
 	
-	if (height > 10 && height < 200)
+	if (height > 10 && height < 300)
 	{
 		IVC* row = vc_image_new(frameg->width, height, 1, 255);//nova imagem para essa linha toda aonde está a matricula
 
@@ -325,37 +341,71 @@ void Frame(IVC* frame, char* c)
 		}
 		int b = 0;
 		//vc_write_image((char*)"row.pgm", row);
-		IVC* rb = vc_image_new(row->width, row->height, 1, 255);
-		vc_gray_to_binary_bernsen(row, rb, 5, 230);//Conversão de escala de cinzentos para binário
+		IVC* rb = vc_image_new(row->width, row->height, 1, 255);//Imagem para passar guardar a imagem em binario
+		double media = 0, desvio = 0;
+		CalculaMediaDesvio(row, &media, &desvio);//Calcular a media e o desvio padrão dos tons de cinzento na imagem
+		vc_gray_to_binary_bernsen(row, rb, ceil(row->width * 0.02),media-desvio - 20);//Conversão de escala de cinzentos para binário pelo metodo de bernsen
+		//em que o kernel é 2% da largura da imagem e o cmin é determinado pela media menos o desvio padrão menos 20;
+		//vc_gray_to_binary(row, 200);
 		//vc_write_image((char *)"rowb.pgm", rb);
-		IVC *rc = vc_image_new(row->width, row->height, 1, 255);
-		vc_binary_open(rb, rc, 5);//Operação morfológica de abertura
+		IVC *rc = vc_image_new(row->width, row->height, 1, 255);//Imagem para fazer a operação morfológica de abertura
+		vc_binary_open(rb, rc, ceil(row->width * 0.005));//Operação morfológica de abertura com o kernel sendo 0.5% da largura da imagem
 		//vc_write_image((char*)"rowc.pgm", rc);
 
-		int* hv = BinVHist(rc);//Histograma vertical
-		int* hh = BinHHist(rc);//Histograma horozontal
-	
-		//Encontra o aonde a matricula começa no eixo horizontal
-		for (int i = (int)rc->width/2; i > 0; i--)
+		int nlabels = 0;//Variável para o numero de etiquetas
+		IVC* labeled = vc_image_new(row->width, row->height, 1, 255);//Imagem para a etiquetagem
+		OVC* blobs = vc_binary_blob_labelling(rc, labeled, &nlabels);//Etiquetagem da imagem que contém a matricula
+		vc_binary_blob_info(labeled, blobs, nlabels);//Recolher a informação relativemente a cada etiqueta
+		vc_write_image((char*)"label.pgm",labeled);
+		int blobIndex = -1;
+		//Determinar qual dos blobs é a matricula
+		for (int i = 0; i < nlabels; i++)
 		{
-			if (hv[i] == 0) {
-				xmin = i - 1;
+			if (blobs[i].area > 0.1 * height * width && blobs[i].width/ blobs[i].height >= 4 && blobs[i].width / blobs[i].height <= 5)blobIndex = i;
+		}
+
+		int* hv = BinVHist(rc);//Histograma vertical		
+		//for (int i = 0; i < width; i++)printf("%d\n", hv[i]);
+
+		//Encontra o aonde a matricula começa no eixo horizontal
+		int i = width / 2;
+		while (i > 0)
+		{
+			if ((float)hv[i] / (float)height < 0.1)
+			{
+				xmin = i + 1;
 				break;
 			}
+			i--;
 		}
 		//Encontra o aonde a matricula acaba no eixo horizontal
-		for (int i = (int)rc->width / 2; i < rc->width; i++)
+		i = (int)rc->width / 2;
+		while(i<width)
 		{
-			if (hv[i] == 0) {
+			if ((float)hv[i] / (float)height < 0.1) 
+			{
 				xmax = i + 1;
 				break;
 			}
+			i++;
 		}
 
 		free(hv);
-		free(hh);
-		
+		//Compara-se os dados recolhidos para saber qual deles é o mais preciso 
+		if (xmax - xmin >= blobs[blobIndex].width + 50)
+		{
+			xmin = blobs[blobIndex].x - 10;
+			xmax = blobs[blobIndex].x + blobs[blobIndex].width + 10;
+		}
+		if (height >= blobs[blobIndex].height + 50)
+		{
+			ymin = blobs[blobIndex].y;
+			ymax = blobs[blobIndex].y + blobs[blobIndex].height + 10;
+			height = ymax - ymin;
+		}
+
 		//Desenho da caixa á volta da matricula
+		//Desenho da linha horizontal superior da caixa delimitadora da matricula
 		for (int x = xmin; x < xmax; x++)
 		{
 			pos = ymin * frame->bytesperline + x * frame->channels;
@@ -366,7 +416,7 @@ void Frame(IVC* frame, char* c)
 				frame->data[pos + 2] = (unsigned char)0;
 			}
 		}
-
+		//Desenho da linha horizontal inferior da caixa delimitadora da matricula
 		for (int x = xmin; x < xmax; x++)
 		{
 			pos = ymax * frame->bytesperline + x * frame->channels;
@@ -377,7 +427,7 @@ void Frame(IVC* frame, char* c)
 				frame->data[pos + 2] = (unsigned char)0;
 			}
 		}
-
+		//Desenho da linha vertical esquerda da caixa delimitadora da matricula
 		for (int y = ymin; y < ymax; y++)
 		{
 			pos = y * frame->bytesperline + xmin * frame->channels;
@@ -388,7 +438,7 @@ void Frame(IVC* frame, char* c)
 				frame->data[pos + 2] = (unsigned char)0;
 			}
 		}
-
+		//Desenho da linha vertical direita da caixa delimitadora da matricula
 		for (int y = ymin; y < ymax; y++)
 		{
 			pos = y * frame->bytesperline + xmax * frame->channels;
@@ -426,7 +476,7 @@ void Frame(IVC* frame, char* c)
 		if (matricula != NULL)
 		{
 			//vc_write_image((char*)"matricula.pgm", matricula);
-			IVC* mb = vc_image_new(matricula->width, matricula->height, 1, 255);
+			IVC* mb = vc_image_new(matricula->width, matricula->height, 1, 255);//Imagem para a matricula em binário
 			//vc_gray_edge_prewitt(matricula, mb, 0.8);
 			vc_gray_to_binary_bernsen(matricula, mb, 5, 150);//Conversão de escala de cinzentos para binário
 			//vc_write_image((char*)"mb.pgm", mb);		
@@ -434,11 +484,13 @@ void Frame(IVC* frame, char* c)
 			vc_binary_open(mb, mc, 3);//Operação morfológica de abertura
 			//vc_write_image((char*)"mo.pgm", mc);
 			vc_bin_negative(mc);//Negativo da matricula
-			vc_write_image((char*)"mn.pgm", mc);
-
+			//vc_write_image((char*)"mn.pgm", mc);
+			
+			//Variável para o número de etiquetas encontradas na etiquetagem da matricula 
 			int nletras = 0;
+			//Array para as etiquetas e a sua informação
 			OVC* letras = vc_binary_blob_labelling(mc, matricula, &nletras);//Etiquetagem da imagem da matricula
-			vc_binary_blob_info(matricula, letras, nletras);//Preenchimento do array com informação das etiquetas da imagen
+			vc_binary_blob_info(matricula, letras, nletras);//Preenchimento do array com informação das etiquetas na imagen
 
 			//vc_write_image((char*)"ml.pgm", matricula);
 
@@ -448,13 +500,14 @@ void Frame(IVC* frame, char* c)
 			float r = 0;
 			int k = 0;
 			int areatotal = matricula->height * matricula->width;
-			//percorrer o array de blobs e encontrar as letras
+			//Percorrer o array de blobs e encontrar as letras
 			for (int j = 0; j < nletras; j++)
 			{
 				r = (float)letras[j].width / (float)letras[j].height;
-				if (r >= 0.4 && r < 1 && letras[j].area > areatotal * 0.0065)//Condições que determinam o quq é um caracter
+				if (r >= 0.4 && r < 1 && letras[j].area > areatotal * 0.007)//Condições que determinam o que é um caracter
 				{
-					//desenho das caixas delimitadoras á volta da letras
+					//Desenho das caixas delimitadoras á volta da letras
+					//Desenho da linha horizontal superior da caixa delimitadora da matricula
 					for (int x = xmin + letras[j].x; x < xmin + letras[j].x + letras[j].width; x++)
 					{
 						pos = (ymin + letras[j].y) * frame->bytesperline + x * frame->channels;
@@ -465,7 +518,7 @@ void Frame(IVC* frame, char* c)
 							frame->data[pos + 2] = (unsigned char)0;
 						}
 					}
-
+					//Desenho da linha horizontal inferior da caixa delimitadora da matricula
 					for (int x = xmin + letras[j].x; x < xmin + letras[j].x + letras[j].width; x++)
 					{
 						pos = (ymin + letras[j].y + letras[j].height) * frame->bytesperline + x * frame->channels;
@@ -476,7 +529,7 @@ void Frame(IVC* frame, char* c)
 							frame->data[pos + 2] = (unsigned char)0;
 						}
 					}
-
+					//Desenho da linha vertical esquerda da caixa delimitadora da matricula
 					for (int y = ymin + letras[j].y; y < ymin + letras[j].y + letras[j].height; y++)
 					{
 						pos = y * frame->bytesperline + (xmin + letras[j].x) * frame->channels;
@@ -487,7 +540,7 @@ void Frame(IVC* frame, char* c)
 							frame->data[pos + 2] = (unsigned char)0;
 						}
 					}
-
+					//Desenho da linha vertical direita da caixa delimitadora da matricula
 					for (int y = ymin + letras[j].y; y < ymin + letras[j].y + letras[j].height; y++)
 					{
 						pos = y * frame->bytesperline + (xmin + letras[j].x + letras[j].width) * frame->channels;
@@ -498,9 +551,8 @@ void Frame(IVC* frame, char* c)
 							frame->data[pos + 2] = (unsigned char)0;
 						}
 					}
-
 					//Criar uma imagem nova no array para o caracter encontrado 
-					caracter[k] = vc_image_new(letras[j].width + 2, letras[j].height + 2, 1, 255);//Uma imagem nova para cada caracter
+					caracter[k] = vc_image_new(letras[j].width + 2, letras[j].height + 2, 1, 255);
 					posk = 0;
 					pos = 0;
 					xk = 0;
@@ -517,17 +569,15 @@ void Frame(IVC* frame, char* c)
 						}
 						yk++;
 						xk = 0;
-					}
-					
+					}					
 					//vc_write_image((char*)"caracter.pgm" , caracter[k]);
 					k++;
 				}
 			}
-
 			//identificação dos 6 caracteres
 			for (int i = 0; i < 6; i++)
 			{
-				vc_write_image((char*)"caracter.pgm", caracter[i]);
+				//vc_write_image((char*)"caracter.pgm", caracter[i]);
 				c[i] = IdentificaCaracter(caracter[i]);
 			}
 
@@ -591,7 +641,72 @@ char IdentificaCaracter(IVC* image)
 	{
 		IVC* open = vc_image_new(image->width, image->height, 1, 255);
 		vc_binary_open(image, open, 3);
-		vc_write_image((char*)"caractero.pgm", open);
+
+		int y1 = open->height / 4;
+		int y2 = open->height * 2/4;
+		int y3 = open->height * 3/4;
+		int pos = 0;
+		int linha1 = 0;
+		unsigned char cor = 0;
+		//Conta as mudanças de cor numa linha horizontal
+		for (int x = 0; x < open->width;x++)
+		{
+			pos = y1 * open->width + x;
+			if (open->data[pos] != cor)
+			{
+				linha1++;
+				cor = open->data[pos];
+			}
+
+		}
+		int linha2 = 0;
+		cor = 0;
+		//Conta as mudanças de cor numa linha horizontal
+		for (int x = 0; x < open->width; x++)
+		{
+			pos = y2 * open->width + x;
+			if (open->data[pos] != cor)
+			{
+				linha2++;
+				cor = open->data[pos];
+			}
+
+		}
+		int linha3 = 0;
+		cor = 0;
+		//Conta as mudanças de cor numa linha horizontal
+		for (int x = 0; x < open->width; x++)
+		{
+			pos = y3 * open->width + x;
+			if (open->data[pos] != cor)
+			{
+				linha3++;
+				cor = open->data[pos];
+			}
+
+		}
+
+		int x1 = open->width / 2;
+		int coluna1 = 0;
+		cor = 0;;
+		//Conta as mudanças de cor numa linha vertical
+		for (int y = 0; y < open->height; y++)
+		{
+			pos = y * open->width + x1;
+			if (open->data[pos] != cor)
+			{
+				coluna1++;
+				cor = open->data[pos];
+			}
+
+		}
+
+		printf("y1=%d\n", linha1);
+		printf("y2=%d\n", linha2);
+		printf("y3=%d\n", linha3);
+		printf("x1=%d\n", coluna1);
+
+		//vc_write_image((char*)"caractero.pgm", open);
 		//Histograma vertical e horizontal da imagem
 		double* histVertical = HistogramaVerticalF(open);
 		double* histHorizontal = HistogramaHorizontalF(open);
@@ -610,22 +725,19 @@ char IdentificaCaracter(IVC* image)
 		printf("%d\n", npicosH);
 		printf("%d\n", npicosV);
 
-		for (int i = 0; i < npicosH; i++)printf("Index: %d --> %f\n", picosH[i], histHorizontal[picosH[i]]);
-		for (int i = 0; i < npicosV; i++)printf("Index: %d --> %f\n", picosV[i], histVertical[picosV[i]]);
-
+		//for (int i = 0; i < npicosH; i++)printf("Index: %d --> %f\n", picosH[i], histHorizontal[picosH[i]]);
+		//for (int i = 0; i < npicosV; i++)printf("Index: %d --> %f\n", picosV[i], histVertical[picosV[i]]);
 
 		//Reconehcimento da letra recebida através do numero de picos no histograma horizontal e vertical e pela posição relativa desses picos na imagem
-		if (npicosH == 1 && (npicosV == 1 || npicosV == 2) && picosH[0] < image->height / 3)return '7';
-		if (npicosH == 3 && (npicosV == 3 || npicosV == 2) && picosH[0] < image->height / 3 && picosH[2] > image->height * 2 / 3 && picosV[0] < image->width / 3 && picosV[1] > image->width * 2/3 && picosH[2] - picosH[1] < 10)return 'Q';
-		if ((npicosH == 1 || npicosH == 2) && npicosV == 2 && picosV[0] < image->width / 3 && image->width * (2 / 3) < picosV[1] && (picosH[0] > image->height * 2 / 3 || picosH[1] > image->height * 2 / 3))return 'U';
-		if (npicosH == 2 && (npicosV == 2 || npicosV == 3) && picosV[0] < image->width / 3)return 'R';
-		if (npicosH == 3 && npicosV == 2 && picosV[1] > image->width * 2 / 3 && histVertical[picosV[1]] > histVertical[picosV[0]] && picosH[2] - picosH[1] > 10)return '9';
-		if ((npicosH == 3 || npicosH == 4) && (npicosV == 3 || npicosV == 2) && picosV[0] < image->width / 3 && histVertical[picosV[0]] > histVertical[picosV[1]] && histHorizontal[picosH[1]]> histHorizontal[picosH[0]])return '6';
-		if ((npicosH == 4 || npicosH == 3 || npicosH == 5 || npicosH == 6) && npicosV == 2 && picosH[0] < image->height / 3 && picosV[0] < image->width / 3 && picosV[1] > image->width * 2/3 && picosH[1] < image->height * 2 / 3 && picosH[1] > image->height / 3)return '8';
-		if (npicosH == 2 && (npicosV == 1 || npicosV == 3) && picosH[1] > image->height * 2 / 3 && picosV[0] > image->width / 3 && picosV[0] < image->width * 2 / 3)return '2';
-		
-
-
+		if (npicosH == 1 && (npicosV == 1 || npicosV == 2) && linha1 == 2 && linha2 == 2 && linha3 == 2 && (coluna1 == 4 || coluna1 == 3))return '7';
+		if (npicosH == 3 && (npicosV == 3 || npicosV == 2)  && linha1 == 4 && linha2 == 4 && linha3 == 4 && coluna1 == 6)return 'Q';
+		if ((npicosH == 1 || npicosH == 2) && npicosV == 2 && linha1 == 3 && linha2 == 4 && linha3 == 4 && (coluna1 == 1 || coluna1 == 2))return 'U';
+		if (npicosH == 2 && (npicosV == 2 || npicosV == 3) && picosV[0] < image->width / 3 && (linha1 == 4 || linha1 ==3) && linha2 == 2 && linha3 == 4 && (coluna1 == 4 || coluna1 == 5))return 'R';
+		if ((npicosH == 3 || npicosH == 5) && npicosV == 2 && linha1 == 3 && (linha2 == 2 || linha2 == 1) && (linha3 == 4 || linha3 == 5) && (coluna1 == 5 || coluna1 == 6))return '9';
+		if ((npicosH == 3 || npicosH == 4) && (npicosV == 3 || npicosV == 2) && (linha1 == 4 || linha1 == 3) && (linha2 == 2) && linha3 == 4 && coluna1 == 5)return '6';
+		if ((npicosH == 3 || npicosH == 4 || npicosH == 5 || npicosH == 6) && npicosV == 2 && (linha1 == 3 || linha1 == 4) && linha2 == 2 && (linha3 == 4 || linha3 == 2) && (coluna1 == 6 || coluna1 == 5))return '8';
+		if (npicosH == 2 && (npicosV == 1 || npicosV == 2 ||npicosV == 3) && linha1 == 4 && linha2 == 2 && linha3 == 3 && (coluna1 == 6 || coluna1 == 5))return '2';
+	
 		free(open);
 		free(histHorizontal);                      
 		free(histVertical);
@@ -633,6 +745,7 @@ char IdentificaCaracter(IVC* image)
 		free(picosV);                                                                                                                                      
 	}
 }
+
 
 //Faz a media de um histograma
 float Media(double* hist, int n)
@@ -747,6 +860,34 @@ int *GetRowProf(IVC* image, int y)
 	return h;
 }
 
+
+//Função para encontrar o numero de zonas de contraste de um histograma dividindo-o em várias partes iguais, encontrado o maximo e minimo em cada
+//uma dessas partes e fazendo a diferença entre eles.
+int vhistogramA(double* h, int n)
+{
+	int max, min;
+	int v = 0;
+	int j = 0;
+	while (j < n - 1)
+	{
+		if (h[j] < h[j + 1])
+		{
+			while (h[j] < h[j + 1])
+			{
+				j++;
+			}
+			if(h[j]>200)
+			v++;			
+		}
+		else
+		{
+			j++;
+		}
+	}
+	return v;
+}
+
+
 //Função para encontrar o numero de zonas de contraste de um histograma dividindo-o em várias partes iguais, encontrado o maximo e minimo em cada
 //uma dessas partes e fazendo a diferença entre eles.
 int vhistogram(int h[], int n, int kernel, int cmin)
@@ -778,6 +919,89 @@ int vhistogram(int h[], int n, int kernel, int cmin)
 }
 
 
+//Função para encontrar o numero de zonas de contraste de um histograma dividindo-o em várias partes iguais, encontrado o maximo e minimo em cada
+//uma dessas partes e fazendo a diferença entre eles e indicando atrvés do booleano a se esses picos de contraste estão próximos uns dos outros
+int vhistogramA(int h[], int n, int kernel, int cmin,bool *a)
+{
+	int max, min;
+	int v = 0;
+	*a = false;
+	int indexh[100];
+	int m = 0;
+	for (int i = 0; i < n; i = i + kernel)
+	{
+		max = 0;
+		min = 255;
+		int c = i;
+		max = h[c];
+		for (c = i + 1; c < i + kernel; c++) {
+			if (h[c] > max) {
+				max = h[c];
+			}
+		}
+		c = i;
+		min = h[c];
+		for (c = i + 1; c < i + kernel; c++) {
+			if (h[c] < min) {
+				min = h[c];
+			}
+		}
+
+		if (max - min > cmin)
+		{
+			v++;
+			indexh[m] = i;
+			m++;
+		}
+	}
+	int i = 0;
+	int c = 0;
+	while (i < m)
+	{
+		if (indexh[i + 1] - indexh[i] <= 2 * kernel)
+		{
+			c++;
+			i++;
+		}
+		else
+		{
+			i++;
+			c = 0;
+		}
+		if (c >= 6) *a = true;
+	}
+
+	return v;
+}
+
+//Calcula a media e o desvio padrão de uma imagem em escala de cinzentos
+int CalculaMediaDesvio(IVC* image, double* media, double* desvio)
+{
+	
+	int width = image->width;
+	int heigth = image->height;
+	if (width < 0 || heigth < 0 || media == NULL || desvio == NULL)return 0;
+	double soma = 0;
+	double sd = 0;
+	*media = 0;
+	*desvio = 0;
+
+	for (int i = 0; i < width * heigth; i++)
+	{
+		soma = soma + (double)image->data[i];
+	}
+	*media = (soma / ((double)width * (double)heigth));	
+	for (int i = 0; i < width * heigth; i++)
+	{
+		sd = sd + pow((double)image->data[i] - *media, 2);
+	}
+	*desvio = sqrt(sd / ((double)width * (double)heigth));
+
+	return 1;
+}
+
+
+//Algorimo do trabalho prático 1
 int BoundingBox(IVC* src)
 {
 	int pos = 0;
