@@ -15,7 +15,6 @@ extern "C" {
 
 int BoundingBox(IVC* src);
 void Frame(IVC* frame, char *c);
-int vhistogram(int h[], int n, int kernel, int cmin);
 int* GetRowProf(IVC* image, int y);
 int* GetColunmProf(IVC* image);
 void mediaMovel(double* histograma, int n);
@@ -26,7 +25,8 @@ char IdentificaCaracter(IVC* image);
 int* IndexPicos(double* histograma, int n, int* npicos);
 float Media(double* hist, int n);
 int CalculaMediaDesvio(IVC* image, double* media, double* desvio);
-int vhistogramA(int h[], int n, int kernel, int cmin, bool* a);
+int vhistogram(int h[], int n, int kernel, int cmin, bool* a);
+
 
 //Histograma horizontal de uma imagem binario
 int* BinHHist(IVC* image)
@@ -235,7 +235,7 @@ void Frame(IVC* frame, char* c)
 		int cmin = 100;
 		h = GetRowProf(frameg, y);//histograma em escala de cinzento de uma determinada linha
 		bool proximidade = false;
-		int v = vhistogramA(h, width, lmc, cmin, &proximidade);//Divide o histograma em partes iguas e faz a diferença de contrates dentro delas e conta as
+		int v = vhistogram(h, width, lmc, cmin, &proximidade);//Divide o histograma em partes iguas e faz a diferença de contrates dentro delas e conta as
 			//diferençãs que são superiores a 100
 
 		//for (int x = 0; x < frame->width; x++)
@@ -269,7 +269,7 @@ void Frame(IVC* frame, char* c)
 			do
 			{
 				yh = GetRowProf(frameg,i);
-				yv = vhistogramA(yh, width, lmc, cmin,&proximidade);
+				yv = vhistogram(yh, width, lmc, cmin,&proximidade);
 				//printf("%d\n", yv);
 				if (yv >= 6 && yv <= 13 && proximidade)
 				{
@@ -291,7 +291,7 @@ void Frame(IVC* frame, char* c)
 			do
 			{
 				yh = GetRowProf(frameg, i);
-				yv = vhistogramA(yh, width, lmc, cmin, &proximidade);
+				yv = vhistogram(yh, width, lmc, cmin, &proximidade);
 				//printf("%d\n", yv);
 				if (yv >= 6 && yv <= 13 && proximidade)
 				{
@@ -356,7 +356,7 @@ void Frame(IVC* frame, char* c)
 		IVC* labeled = vc_image_new(row->width, row->height, 1, 255);//Imagem para a etiquetagem
 		OVC* blobs = vc_binary_blob_labelling(rc, labeled, &nlabels);//Etiquetagem da imagem que contém a matricula
 		vc_binary_blob_info(labeled, blobs, nlabels);//Recolher a informação relativemente a cada etiqueta
-		vc_write_image((char*)"label.pgm",labeled);
+		//vc_write_image((char*)"label.pgm",labeled);
 		int blobIndex = -1;
 		//Determinar qual dos blobs é a matricula
 		for (int i = 0; i < nlabels; i++)
@@ -640,8 +640,9 @@ char IdentificaCaracter(IVC* image)
 	if (image != NULL)
 	{
 		IVC* open = vc_image_new(image->width, image->height, 1, 255);
-		vc_binary_open(image, open, 3);
+		vc_binary_open(image, open, 3);//Operação morfológica de abertura no caracter
 
+		//Calculo da posição das linhas horizontais que contam as mudanças de cor
 		int y1 = open->height / 4;
 		int y2 = open->height * 2/4;
 		int y3 = open->height * 3/4;
@@ -685,7 +686,7 @@ char IdentificaCaracter(IVC* image)
 			}
 
 		}
-
+		//Posição da linha vertical que conta as mudanças de cor
 		int x1 = open->width / 2;
 		int coluna1 = 0;
 		cor = 0;;
@@ -701,10 +702,10 @@ char IdentificaCaracter(IVC* image)
 
 		}
 
-		printf("y1=%d\n", linha1);
-		printf("y2=%d\n", linha2);
-		printf("y3=%d\n", linha3);
-		printf("x1=%d\n", coluna1);
+		//printf("y1=%d\n", linha1);
+		//printf("y2=%d\n", linha2);
+		//printf("y3=%d\n", linha3);
+		//printf("x1=%d\n", coluna1);
 
 		//vc_write_image((char*)"caractero.pgm", open);
 		//Histograma vertical e horizontal da imagem
@@ -722,8 +723,8 @@ char IdentificaCaracter(IVC* image)
 		int* picosH = IndexPicos(histHorizontal, image->height, &npicosH);//array com o os indices dos picos horizontais
 		int* picosV = IndexPicos(histVertical, image->width, &npicosV);//array com o os indices dos picos verticais
 
-		printf("%d\n", npicosH);
-		printf("%d\n", npicosV);
+		//printf("%d\n", npicosH);
+		//printf("%d\n", npicosV);
 
 		//for (int i = 0; i < npicosH; i++)printf("Index: %d --> %f\n", picosH[i], histHorizontal[picosH[i]]);
 		//for (int i = 0; i < npicosV; i++)printf("Index: %d --> %f\n", picosV[i], histVertical[picosV[i]]);
@@ -731,18 +732,19 @@ char IdentificaCaracter(IVC* image)
 		//Reconehcimento da letra recebida através do numero de picos no histograma horizontal e vertical e pela posição relativa desses picos na imagem
 		if (npicosH == 1 && (npicosV == 1 || npicosV == 2) && linha1 == 2 && linha2 == 2 && linha3 == 2 && (coluna1 == 4 || coluna1 == 3))return '7';
 		if (npicosH == 3 && (npicosV == 3 || npicosV == 2)  && linha1 == 4 && linha2 == 4 && linha3 == 4 && coluna1 == 6)return 'Q';
-		if ((npicosH == 1 || npicosH == 2) && npicosV == 2 && linha1 == 3 && linha2 == 4 && linha3 == 4 && (coluna1 == 1 || coluna1 == 2))return 'U';
+		if ((npicosH == 1 || npicosH == 2) && npicosV == 2 && (linha1 == 3 || linha1 == 4) && (linha2 == 4 ||linha2 == 3) && linha3 == 4 && (coluna1 == 1 || coluna1 == 2))return 'U';
 		if (npicosH == 2 && (npicosV == 2 || npicosV == 3) && picosV[0] < image->width / 3 && (linha1 == 4 || linha1 ==3) && linha2 == 2 && linha3 == 4 && (coluna1 == 4 || coluna1 == 5))return 'R';
-		if ((npicosH == 3 || npicosH == 5) && npicosV == 2 && linha1 == 3 && (linha2 == 2 || linha2 == 1) && (linha3 == 4 || linha3 == 5) && (coluna1 == 5 || coluna1 == 6))return '9';
-		if ((npicosH == 3 || npicosH == 4) && (npicosV == 3 || npicosV == 2) && (linha1 == 4 || linha1 == 3) && (linha2 == 2) && linha3 == 4 && coluna1 == 5)return '6';
+		if ((npicosH == 3 || npicosH == 5) && npicosV == 2 && linha1 == 3 && (linha2 == 2 || linha2 == 1) && (linha3 == 4 || linha3 == 5) && (coluna1 == 5 || coluna1 == 6) && histVertical[picosV[0]] < histVertical[picosV[1]])return '9';
+		if ((npicosH == 3 || npicosH == 4) && (npicosV == 3 || npicosV == 2) && (linha1 == 4 || linha1 == 3) && (linha2 == 2) && linha3 == 4 && coluna1 == 5 && histVertical[picosV[0] > histVertical[picosV[1]]])return '6';
 		if ((npicosH == 3 || npicosH == 4 || npicosH == 5 || npicosH == 6) && npicosV == 2 && (linha1 == 3 || linha1 == 4) && linha2 == 2 && (linha3 == 4 || linha3 == 2) && (coluna1 == 6 || coluna1 == 5))return '8';
-		if (npicosH == 2 && (npicosV == 1 || npicosV == 2 ||npicosV == 3) && linha1 == 4 && linha2 == 2 && linha3 == 3 && (coluna1 == 6 || coluna1 == 5))return '2';
-	
+		if (npicosH == 2 && (npicosV == 1 || npicosV == 2 ||npicosV == 3) && linha1 == 3 && (linha2 == 2 || linha2 == 4) && linha3 == 2 && (coluna1 == 6 || coluna1 == 5))return '2';
+		
 		free(open);
 		free(histHorizontal);                      
 		free(histVertical);
 		free(picosH);
-		free(picosV);                                                                                                                                      
+		free(picosV); 
+
 	}
 }
 
@@ -860,75 +862,16 @@ int *GetRowProf(IVC* image, int y)
 	return h;
 }
 
-
-//Função para encontrar o numero de zonas de contraste de um histograma dividindo-o em várias partes iguais, encontrado o maximo e minimo em cada
-//uma dessas partes e fazendo a diferença entre eles.
-int vhistogramA(double* h, int n)
-{
-	int max, min;
-	int v = 0;
-	int j = 0;
-	while (j < n - 1)
-	{
-		if (h[j] < h[j + 1])
-		{
-			while (h[j] < h[j + 1])
-			{
-				j++;
-			}
-			if(h[j]>200)
-			v++;			
-		}
-		else
-		{
-			j++;
-		}
-	}
-	return v;
-}
-
-
-//Função para encontrar o numero de zonas de contraste de um histograma dividindo-o em várias partes iguais, encontrado o maximo e minimo em cada
-//uma dessas partes e fazendo a diferença entre eles.
-int vhistogram(int h[], int n, int kernel, int cmin)
-{
-	int max, min;
-	int v = 0;
-	for (int i = 0; i < n; i = i + kernel)
-	{
-		max = 0;
-		min = 255;
-		int c = i;
-		max = h[c];
-		for (c = i + 1; c < i + kernel; c++) {
-			if (h[c] > max) {
-				max = h[c];
-			}
-		}
-		c = i;
-		min = h[c];
-		for (c = i + 1; c < i + kernel; c++) {
-			if (h[c] < min) {
-				min = h[c];
-			}
-		}
-
-		if (max - min > cmin)v++;
-	}
-	return v;
-}
-
-
 //Função para encontrar o numero de zonas de contraste de um histograma dividindo-o em várias partes iguais, encontrado o maximo e minimo em cada
 //uma dessas partes e fazendo a diferença entre eles e indicando atrvés do booleano a se esses picos de contraste estão próximos uns dos outros
-int vhistogramA(int h[], int n, int kernel, int cmin,bool *a)
+int vhistogram(int h[], int n, int kernel, int cmin,bool *a)
 {
 	int max, min;
 	int v = 0;
 	*a = false;
 	int indexh[100];
 	int m = 0;
-	for (int i = 0; i < n; i = i + kernel)
+	for (int i = 0; i < n; i = i + kernel)		
 	{
 		max = 0;
 		min = 255;
